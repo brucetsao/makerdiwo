@@ -39,8 +39,8 @@
 
 #include "RTClib.h"
 RTC_DS1307 RTC;
- DateTime nowT; 
-// DateTime nowT = RTC.now(); 
+//DateTime nowT = RTC.now(); 
+
 #include <LiquidCrystal_I2C.h>
 #include <SoftwareSerial.h>
 
@@ -48,7 +48,7 @@ uint8_t MacData[6];
 
 SoftwareSerial mySerial(0, 1); // RX, TX
 char ssid[] = "TSAO";      // your network SSID (name)
-char pass[] = "TSAO1234";     // your network password
+char pass[] = "1234";     // your network password
 int keyIndex = 0;               // your network key Index number (needed only for WEP)
 
 char gps_lat[] = "23.954710";  // device's gps latitude 清心福全(中正店) 510彰化縣員林市中正路254號
@@ -87,10 +87,9 @@ uint32_t epochSystem = 0; // timestamp of system boot up
 #define pmsDataLen 24
 uint8_t buf[pmsDataLen];
 int idx = 0;
+int pm10 = 0;
 int pm25 = 0;
-uint16_t PM01Value=0;          //define PM1.0 value of the air detector module
-uint16_t PM2_5Value=0;         //define PM2.5 value of the air detector module
-uint16_t PM10Value=0;         //define PM10 value of the air detector module
+int pm100 = 0;
   int NDPyear, NDPmonth, NDPday, NDPhour, NDPminute, NDPsecond;
   unsigned long epoch  ;
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // 設定 LCD I2C 位址
@@ -104,48 +103,24 @@ void setup() {
   mySerial.begin(9600); // PMS 3003 UART has baud rate 9600
   lcd.begin(20, 4);      // 初始化 LCD，一行 20 的字元，共 4 行，預設開啟背光
        lcd.backlight(); // 開啟背光
-     //  while(!Serial) ;
-     initRTC() ;
-  
   MacAddress = GetWifiMac() ;
   ShowMac() ;
     initializeWiFi();
   retrieveNtpTime();
+  initRTC() ;
   ShowDateTime() ;
   showLed() ;
   ShowInternetStatus() ;
   
   initializeMQTT();
-
-}
+ }
 
 void loop() { // run over and over
     ShowDateTime() ;
   showLed() ;
-  idx = 0;
-  memset(buf, 0, pmsDataLen);
-
-  while (mySerial.available()) 
-    {
-      buf[idx++] = mySerial.read();
-    }
-
-  // check if data header is correct
-  if (buf[0] == 0x42 && buf[1] == 0x4d) 
-      {
-        pm25 = ( buf[12] << 8 ) | buf[13]; 
-        Serial.print("pm2.5: ");
-        Serial.print(pm25);
-        Serial.println(" ug/m3");
-        ShowPM(pm25) ;
-      }
-        if (client.connected()) 
-        {
-          reconnectMQTT();
-         }
-        client.loop();
-
-       delay(60000); // delay 1 minute for next measurement
+    retrievePM25Value() ;
+  
+       delay(6000); // delay 1 minute for next measurement
 
 
 }
@@ -176,38 +151,43 @@ void ShowInternetStatus()
 
 }
 
-void ShowPM(int pp25)
+void ShowPM(int pp25, int pp10, int pp100)
 {
     lcd.setCursor(0, 3); // 設定游標位置在第一行行首
-     lcd.print("  PM2.5:");
+     lcd.print("PM2.5:");
      lcd.print(pp25);
+     lcd.print("/");
+     lcd.print(pp10);
+     lcd.print("/");
+     lcd.print(pp100);
 
 }
 
 void ShowDateTime()
 {
-    getCurrentTime(epoch, &NDPyear, &NDPmonth, &NDPday, &NDPhour, &NDPminute, &NDPsecond);
+  //  getCurrentTime(epoch, &NDPyear, &NDPmonth, &NDPday, &NDPhour, &NDPminute, &NDPsecond);
     lcd.setCursor(0, 2); // 設定游標位置在第一行行首
      lcd.print(StrDate());
     lcd.setCursor(11, 2); // 設定游標位置在第一行行首
      lcd.print(StrTime());
-   //  lcd.print();
-
+   
 }
 
 String  StrDate() {
   String ttt ;
 //nowT  = now; 
-// ttt = print4digits(nowT.year()) + "/" + print2digits(nowT.month()) + "/" + print2digits(nowT.day()) ;
- ttt = print4digits(NDPyear) + "/" + print2digits(NDPmonth) + "/" + print2digits(NDPday) ;
+DateTime now = RTC.now(); 
+ ttt = print4digits(now.year()) + "/" + print2digits(now.month()) + "/" + print2digits(now.day()) ;
+ //ttt = print4digits(NDPyear) + "/" + print2digits(NDPmonth) + "/" + print2digits(NDPday) ;
   return ttt ;
 }
 
 String  StrTime() {
   String ttt ;
  // nowT  = RTC.now(); 
- // ttt = print2digits(nowT.hour()) + ":" + print2digits(nowT.minute()) + ":" + print2digits(nowT.second()) ;
-    ttt = print2digits(NDPhour) + ":" + print2digits(NDPminute) + ":" + print2digits(NDPsecond) ;
+ DateTime now = RTC.now(); 
+  ttt = print2digits(now.hour()) + ":" + print2digits(now.minute()) + ":" + print2digits(now.second()) ;
+  //  ttt = print2digits(NDPhour) + ":" + print2digits(NDPminute) + ":" + print2digits(NDPsecond) ;
 return ttt ;
 }
 String GetWifiMac()
@@ -404,10 +384,20 @@ void retrievePM25Value() {
 
     if (buf[0] == 0x42 && buf[1] == 0x4d) {
       pm25 = ( buf[12] << 8 ) | buf[13]; 
+      pm10 = ( buf[10] << 8 ) | buf[11]; 
+      pm100 = ( buf[14] << 8 ) | buf[15]; 
       Serial.print("pm2.5: ");
       Serial.print(pm25);
-      Serial.println(" ug/m3");
+      Serial.print(" ug/m3");
+      Serial.print("pm1.5: ");
+      Serial.print(pm10);
+      Serial.print(" ug/m3");
+      Serial.print("pm100: ");
+      Serial.print(pm100);
+      Serial.print(" ug/m3");
+      Serial.println("");
       hasPm25Value = true;
+      ShowPM(pm25,pm10,pm100) ;
     }
     timeout--;
     if (timeout < 0) {
@@ -434,7 +424,7 @@ void initializeWiFi() {
 }
 
 void initializeMQTT() {
-
+    digitalWrite(AccessLed,turnon) ;
  // byte mac[6];
  // WiFi.macAddress(MacData);
   memset(clientId, 0, MAX_CLIENT_ID_LEN);
@@ -449,7 +439,7 @@ void initializeMQTT() {
   client.setServer(server, 1883);
   client.setCallback(callback);
 
-
+  digitalWrite(AccessLed,turnoff) ;
 }
 
 void printWifiData() 
@@ -512,15 +502,13 @@ void showLed()
 
 void initRTC()
 {
-  
-     Wire.begin();
+       Wire.begin();
     RTC.begin();
   if (! RTC.isrunning()) {
     Serial.println("RTC is NOT running!");
     // following line sets the RTC to the date & time this sketch was compiled
     RTC.adjust(DateTime(__DATE__, __TIME__));
   }
-
 }
 void initPins()
 {
