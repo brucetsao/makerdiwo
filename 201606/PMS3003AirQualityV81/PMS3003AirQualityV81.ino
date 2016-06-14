@@ -69,7 +69,7 @@ uint8_t MacData[6];
 
 SoftwareSerial mySerial(0, 1); // RX, TX
 char ssid[] = "TSAO";      // your network SSID (name)
-char pass[] = "1234";     // your network password
+char pass[] = "TSAO1234";     // your network password
 int keyIndex = 0;               // your network key Index number (needed only for WEP)
 
 char gps_lat[] = "23.954710";  // device's gps latitude 清心福全(中正店) 510彰化縣員林市中正路254號
@@ -105,12 +105,15 @@ static  const uint8_t monthDays[]={31,28,31,30,31,30,31,31,30,31,30,31}; // API 
 uint32_t epochSystem = 0; // timestamp of system boot up
 
 
-#define pmsDataLen 24
+#define pmsDataLen 32
 uint8_t buf[pmsDataLen];
 int idx = 0;
 int pm10 = 0;
 int pm25 = 0;
 int pm100 = 0;
+uint16_t PM01Value=0;          //define PM1.0 value of the air detector module
+uint16_t PM2_5Value=0;         //define PM2.5 value of the air detector module
+uint16_t PM10Value=0;         //define PM10 value of the air detector module
   int NDPyear, NDPmonth, NDPday, NDPhour, NDPminute, NDPsecond;
   unsigned long epoch  ;
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // 設定 LCD I2C 位址
@@ -124,7 +127,9 @@ void setup() {
   mySerial.begin(9600); // PMS 3003 UART has baud rate 9600
   lcd.begin(20, 4);      // 初始化 LCD，一行 20 的字元，共 4 行，預設開啟背光
        lcd.backlight(); // 開啟背光
- 
+     //  while(!Serial) ;
+
+  
   MacAddress = GetWifiMac() ;
   ShowMac() ;
     initializeWiFi();
@@ -135,6 +140,7 @@ void setup() {
   ShowInternetStatus() ;
   
   initializeMQTT();
+   //  initRTC() ;
      delay(1500);
 }
 
@@ -148,10 +154,60 @@ void loop() { // run over and over
   }
   client.loop();
 
-  delay(6000); // delay 1 minute for next measurement
+  delay(3000); // delay 1 minute for next measurement
   
 
 }
+
+uint8_t checkValue(uint8_t *thebuf, uint8_t leng)
+{  
+  uint8_t receiveflag=1;
+  uint16_t receiveSum=0;
+  uint8_t i=0;
+
+  for(i=0;i<leng;i++)
+  {
+  receiveSum=receiveSum+thebuf[i];
+  }
+  
+  if(receiveSum==((thebuf[leng-2]<<8)+thebuf[leng-1]+thebuf[leng-2]+thebuf[leng-1]))  //check the serial data 
+      {
+        receiveSum=0;
+      receiveflag=1;
+    //  Serial.print(receiveflag);
+      return receiveflag;
+      }
+}
+//transmit PM Value to PC
+uint16_t transmitPM01(uint8_t *thebuf)
+{
+
+  uint16_t PM01Val;
+
+  PM01Val=((thebuf[4]<<8) + thebuf[5]); //count PM1.0 value of the air detector module
+  return PM01Val;
+}
+
+//transmit PM Value to PC
+uint16_t transmitPM2_5(uint8_t *thebuf)
+{
+      uint16_t PM2_5Val;
+    
+        PM2_5Val=((thebuf[6]<<8) + thebuf[7]);//count PM2.5 value of the air detector module
+    
+      return PM2_5Val;
+  }
+
+//transmit PM Value to PC
+uint16_t transmitPM10(uint8_t *thebuf)
+{
+  
+      uint16_t PM10Val;
+    
+        PM10Val=((thebuf[8]<<8) + thebuf[9]); //count PM10 value of the air detector module
+      
+      return PM10Val;
+  }
 
 void ShowMac()
 {
@@ -462,10 +518,10 @@ void retrievePM25Value() {
       pm100 = ( buf[14] << 8 ) | buf[15]; 
       Serial.print("pm2.5: ");
       Serial.print(pm25);
-      Serial.print(" ug/m3");
+      Serial.print(", ug/m3");
       Serial.print("pm1.5: ");
       Serial.print(pm10);
-      Serial.print(" ug/m3");
+      Serial.print(", ug/m3");
       Serial.print("pm100: ");
       Serial.print(pm100);
       Serial.print(" ug/m3");
