@@ -29,10 +29,10 @@
 // (on the 2-row header at the end of the board).
 
 // Assign human-readable names to some common 16-bit color values:
-#define	BLACK   0x0000
-#define	BLUE    0x001F
-#define	RED     0xF800
-#define	GREEN   0x07E0
+#define  BLACK   0x0000
+#define BLUE    0x001F
+#define RED     0xF800
+#define GREEN   0x07E0
 #define CYAN    0x07FF
 #define MAGENTA 0xF81F
 #define YELLOW  0xFFE0
@@ -58,9 +58,11 @@ void setup(void) {
   tft.reset();
 
   uint16_t identifier = tft.readID();
-identifier=0x9341;
+
   if(identifier == 0x9325) {
     Serial.println(F("Found ILI9325 LCD driver"));
+  } else if(identifier == 0x9327) {
+    Serial.println(F("Found ILI9327 LCD driver"));
   } else if(identifier == 0x9328) {
     Serial.println(F("Found ILI9328 LCD driver"));
   } else if(identifier == 0x7575) {
@@ -69,6 +71,8 @@ identifier=0x9341;
     Serial.println(F("Found ILI9341 LCD driver"));
   } else if(identifier == 0x8357) {
     Serial.println(F("Found HX8357D LCD driver"));
+  } else if(identifier == 0x0154) {
+    Serial.println(F("Found S6D0154 LCD driver"));
   } else {
     Serial.print(F("Unknown LCD driver chip: "));
     Serial.println(identifier, HEX);
